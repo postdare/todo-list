@@ -1,0 +1,193 @@
+{
+  "version": 1,
+  "id": "m-202608311424-fl3zgc",
+  "title": "Go TUI Todo List MVP",
+  "objective": "Build a minimal but polished Go CLI TUI for managing a personal todo list. The MVP supports three status tabs (未开始 / 进行中 / 已完成), keyboard navigation, adding todos, toggling completion with Space, marking in-progress with `i`, and local JSON persistence. The storage layer is designed behind an interface so future providers can be swapped in.",
+  "status": "completed",
+  "createdAt": "2026-08-31T14:24:54.996Z",
+  "updatedAt": "2026-08-31T15:26:00.000Z",
+  "maxValidationRounds": 3,
+  "contract": {
+    "assertions": [
+      "`go build ./...` succeeds without errors.",
+      "Running the binary launches a TUI with three tabs labeled 未开始, 进行中, and 已完成.",
+      "Pressing `n` opens a prompt to enter a new todo title; pressing Enter saves it and it appears under the 未开始 tab.",
+      "Pressing ↑/↓ moves the selection indicator through todos in the current tab.",
+      "Pressing ←/→ switches the active tab and updates the filtered list.",
+      "Pressing Space on a non-已完成 todo marks it 已完成; pressing Space on a 已完成 todo marks it 未开始.",
+      "Pressing `i` on a selected todo marks it 进行中.",
+      "Todos are persisted to a JSON file in the XDG config directory; after quitting and relaunching, the same todos appear in the correct tabs.",
+      "Pressing `q` or Ctrl+C exits the application cleanly.",
+      "The JSON storage file is human-readable and contains id, title, status, and created_at for each todo."
+    ],
+    "smokeCommands": [
+      "go build -o bin/todo-list ./cmd/todo-list",
+      "./bin/todo-list",
+      "cat ~/.config/todo-list/todos.json  # after adding/ modifying todos"
+    ],
+    "userTesting": true
+  },
+  "milestones": [
+    {
+      "id": "ms1",
+      "title": "Foundation & Local Storage",
+      "status": "done",
+      "features": [
+        {
+          "id": "f1",
+          "title": "Go module and project layout",
+          "spec": "Initialize the Go module and project layout. Create `cmd/todo-list/main.go` as the entry point, set up internal packages for `storage`, `todo`, and `tui`. Add dependencies to `go.mod`: `github.com/charmbracelet/bubbletea`, `github.com/charmbracelet/lipgloss`, `github.com/charmbracelet/bubbles`, and `github.com/adrg/xdg`. Ensure `go build ./...` succeeds. Do not implement business logic yet.",
+          "assertions": [
+            "`go build ./...` succeeds without errors."
+          ],
+          "status": "done"
+        },
+        {
+          "id": "f2",
+          "title": "Todo domain model and JSON storage interface",
+          "spec": "Define a `Todo` struct with fields `ID`, `Title`, `Status` (one of 未开始 / 进行中 / 已完成), and `CreatedAt`. Define a `Storage` interface with Add, Update, Delete, and List methods. Implement a JSON-file-backed storage at the XDG config directory (e.g., `~/.config/todo-list/todos.json`). The JSON file must be human-readable and persist `id`, `title`, `status`, and `created_at`. The interface-based design must allow future providers to be swapped in.",
+          "assertions": [
+            "Todos are persisted to a JSON file in the XDG config directory; after quitting and relaunching, the same todos appear in the correct tabs.",
+            "The JSON storage file is human-readable and contains id, title, status, and created_at for each todo."
+          ],
+          "status": "done"
+        },
+        {
+          "id": "f3",
+          "title": "Storage unit tests",
+          "spec": "Write unit tests for the storage layer in `internal/storage`. Cover Add/Update/Delete/List, JSON file format, and persistence round-trip. Use a temporary directory for test isolation. Ensure `go test ./...` passes.",
+          "assertions": [
+            "`go build ./...` succeeds without errors.",
+            "Todos are persisted to a JSON file in the XDG config directory; after quitting and relaunching, the same todos appear in the correct tabs.",
+            "The JSON storage file is human-readable and contains id, title, status, and created_at for each todo."
+          ],
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "ms2",
+      "title": "TUI Core Layout & Navigation",
+      "status": "done",
+      "features": [
+        {
+          "id": "f4",
+          "title": "Bubble Tea app scaffold",
+          "spec": "Scaffold the Bubble Tea application. Define the main model with state for active tab, selected index, todos, input mode, and input buffer. Implement `Init`, `Update`, and `View`. Wire the entry point in `cmd/todo-list/main.go` to call `tea.NewProgram`. Ensure the app starts and exits cleanly with `q` or `Ctrl+C`.",
+          "assertions": [
+            "`go build ./...` succeeds without errors.",
+            "Running the binary launches a TUI with three tabs labeled 未开始, 进行中, and 已完成.",
+            "Pressing `q` or Ctrl+C exits the application cleanly."
+          ],
+          "status": "done"
+        },
+        {
+          "id": "f5",
+          "title": "Render tabs and filtered todo list",
+          "spec": "Render a tab bar with three tabs labeled 未开始, 进行中, 已完成. Render the todos filtered by the active tab status, with a selection indicator on the currently selected item. Use `lipgloss` for minimal styling: distinct active/inactive tab styles. Handle empty tabs gracefully.",
+          "assertions": [
+            "Running the binary launches a TUI with three tabs labeled 未开始, 进行中, and 已完成.",
+            "Pressing ↑/↓ moves the selection indicator through todos in the current tab.",
+            "Pressing ←/→ switches the active tab and updates the filtered list."
+          ],
+          "status": "done"
+        },
+        {
+          "id": "f6",
+          "title": "Keyboard navigation",
+          "spec": "Implement keyboard handling: ↑/↓ move selection within the current tab; ←/→ switch tabs and reset selection to the first item of the new tab; `q` or `Ctrl+C` quit. Ensure selection bounds are respected and an empty tab does not crash.",
+          "assertions": [
+            "Pressing ↑/↓ moves the selection indicator through todos in the current tab.",
+            "Pressing ←/→ switches the active tab and updates the filtered list.",
+            "Pressing `q` or Ctrl+C exits the application cleanly."
+          ],
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "ms3",
+      "title": "Todo Operations",
+      "status": "done",
+      "features": [
+        {
+          "id": "f7",
+          "title": "Add new todo input flow",
+          "spec": "Pressing `n` enters input mode and shows a prompt for the todo title. Typing fills the input. Enter saves the todo with status 未开始 and returns to list view; Esc cancels. The new todo appears immediately in the 未开始 tab and is persisted to JSON.",
+          "assertions": [
+            "Pressing `n` opens a prompt to enter a new todo title; pressing Enter saves it and it appears under the 未开始 tab.",
+            "Todos are persisted to a JSON file in the XDG config directory; after quitting and relaunching, the same todos appear in the correct tabs."
+          ],
+          "status": "done"
+        },
+        {
+          "id": "f8",
+          "title": "Space toggles completion",
+          "spec": "Pressing Space on a selected todo whose status is not 已完成 changes it to 已完成. Pressing Space on a 已完成 todo changes it back to 未开始. Changes are persisted immediately and the list re-renders in the correct tab.",
+          "assertions": [
+            "Pressing Space on a non-已完成 todo marks it 已完成; pressing Space on a 已完成 todo marks it 未开始.",
+            "Todos are persisted to a JSON file in the XDG config directory; after quitting and relaunching, the same todos appear in the correct tabs."
+          ],
+          "status": "done"
+        },
+        {
+          "id": "f9",
+          "title": "Mark in-progress with `i`",
+          "spec": "Pressing `i` on a selected todo sets its status to 进行中. The change is persisted immediately and the todo moves to the 进行中 tab. The selection state updates gracefully.",
+          "assertions": [
+            "Pressing `i` on a selected todo marks it 进行中.",
+            "Todos are persisted to a JSON file in the XDG config directory; after quitting and relaunching, the same todos appear in the correct tabs."
+          ],
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "ms4",
+      "title": "Polish, Help, and Integration",
+      "status": "done",
+      "features": [
+        {
+          "id": "f10",
+          "title": "Lipgloss styling and layout",
+          "spec": "Polish the UI with `lipgloss`. Style the tab bar, selected todo row, input prompt, and help footer with a cohesive color scheme. The active tab and selected item must be clearly highlighted. Keep the layout responsive to terminal width without crashing.",
+          "assertions": [
+            "Running the binary launches a TUI with three tabs labeled 未开始, 进行中, and 已完成.",
+            "Pressing ↑/↓ moves the selection indicator through todos in the current tab.",
+            "Pressing ←/→ switches the active tab and updates the filtered list."
+          ],
+          "status": "done"
+        },
+        {
+          "id": "f11",
+          "title": "Help footer with keybindings",
+          "spec": "Add a persistent help bar/footer displaying keybindings: ↑/↓ navigate, ←/→ switch tabs, n add, Space toggle complete, i in-progress, q quit. The help text must be visible, concise, and unobtrusive.",
+          "assertions": [
+            "Pressing `q` or Ctrl+C exits the application cleanly."
+          ],
+          "status": "done"
+        },
+        {
+          "id": "f12",
+          "title": "Integration smoke tests",
+          "spec": "Add end-to-end tests that drive the Bubble Tea model programmatically: add a todo, mark it in-progress, mark it complete, quit, then assert the JSON file contains the expected records. Alternatively use a PTY-based test. Document the smoke commands in README. Ensure `go test ./...` passes.",
+          "assertions": [
+            "`go build ./...` succeeds without errors.",
+            "Pressing `n` opens a prompt to enter a new todo title; pressing Enter saves it and it appears under the 未开始 tab.",
+            "Pressing Space on a non-已完成 todo marks it 已完成; pressing Space on a 已完成 todo marks it 未开始.",
+            "Pressing `i` on a selected todo marks it 进行中.",
+            "Todos are persisted to a JSON file in the XDG config directory; after quitting and relaunching, the same todos appear in the correct tabs."
+          ],
+          "status": "done"
+        }
+      ]
+    }
+  ],
+  "run": {
+    "runId": "0cbfa6a4-1d70-4ffc-87cd-4cebfa6b7fe9",
+    "asyncDir": "/tmp/pi-subagents-uid-0/async-subagent-runs/0cbfa6a4-1d70-4ffc-87cd-4cebfa6b7fe9",
+    "subagentMissionId": "811a6f93-ac8e-46e9-86ff-c11f99504271",
+    "startedAt": "2026-08-31T14:57:18.354Z",
+    "endedAt": "2026-08-31T14:59:28.968Z"
+  }
+}

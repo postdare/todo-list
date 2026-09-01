@@ -1,0 +1,23 @@
+{
+  "taskId": "T3",
+  "attempt": 1,
+  "at": 1788196018707,
+  "evidences": [
+    {
+      "level": "hard",
+      "acId": "test-unit",
+      "result": "pass",
+      "raw": "ok  \ttodo-list/internal/storage\t(cached)\nok  \ttodo-list/internal/todo\t(cached)\nok  \ttodo-list/internal/tui\t(cached)\n\n",
+      "exitCode": 0,
+      "envFingerprint": "sha256:d74cabbb07a38208"
+    },
+    {
+      "level": "hard",
+      "acId": "test-e2e",
+      "result": "pass",
+      "raw": "ok  \ttodo-list/cmd/todo-list\t1.996s\n\n",
+      "exitCode": 0,
+      "envFingerprint": "sha256:d74cabbb07a38208"
+    }
+  ]
+}

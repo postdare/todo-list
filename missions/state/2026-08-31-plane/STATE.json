@@ -1,0 +1,57 @@
+{
+  "missionId": "2026-08-31-plane",
+  "tier": "standard",
+  "phase": "done",
+  "currentTask": null,
+  "taskOrder": [
+    "T1",
+    "T2",
+    "T3"
+  ],
+  "tasks": {
+    "T1": {
+      "id": "T1",
+      "status": "done",
+      "attempts": 1,
+      "sameSignatureCount": 0,
+      "inconclusiveStreak": 0
+    },
+    "T2": {
+      "id": "T2",
+      "status": "done",
+      "attempts": 1,
+      "sameSignatureCount": 0,
+      "inconclusiveStreak": 0
+    },
+    "T3": {
+      "id": "T3",
+      "status": "done",
+      "attempts": 1,
+      "sameSignatureCount": 0,
+      "inconclusiveStreak": 0
+    }
+  },
+  "escalation": {
+    "level": 1,
+    "history": []
+  },
+  "envFingerprint": "sha256:d74cabbb07a38208",
+  "pendingHandoff": null,
+  "sessionMap": {
+    "T1": "/root/.pi/agent/sessions/--root-projects-todo-list--/2026-08-31T17-00-42-415Z_01a058c4-1c2f-750f-8819-eee8a7abafde.jsonl"
+  },
+  "cost": {
+    "planner": 0.0084096488,
+    "executor": 0.023699832799999994,
+    "verifier": 0.0097454392
+  },
+  "metrics": {
+    "touchedFiles": [
+      "/root/projects/todo-list/internal/tui/tui.go",
+      "/root/projects/todo-list/internal/tui/tui_test.go",
+      "/root/projects/todo-list/cmd/todo-list/main_test.go"
+    ],
+    "touchedPublicApi": false
+  },
+  "updatedAt": 1788196499386
+}

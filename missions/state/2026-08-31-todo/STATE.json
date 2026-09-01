@@ -1,0 +1,85 @@
+{
+  "missionId": "2026-08-31-todo",
+  "tier": "complex",
+  "phase": "plan",
+  "currentTask": "T5",
+  "taskOrder": [
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "T5"
+  ],
+  "tasks": {
+    "T1": {
+      "id": "T1",
+      "status": "done",
+      "attempts": 1,
+      "sameSignatureCount": 0,
+      "inconclusiveStreak": 0
+    },
+    "T2": {
+      "id": "T2",
+      "status": "done",
+      "attempts": 1,
+      "sameSignatureCount": 0,
+      "inconclusiveStreak": 0
+    },
+    "T3": {
+      "id": "T3",
+      "status": "done",
+      "attempts": 1,
+      "sameSignatureCount": 0,
+      "inconclusiveStreak": 0
+    },
+    "T4": {
+      "id": "T4",
+      "status": "done",
+      "attempts": 1,
+      "sameSignatureCount": 0,
+      "inconclusiveStreak": 0
+    },
+    "T5": {
+      "id": "T5",
+      "status": "running",
+      "attempts": 1,
+      "sameSignatureCount": 0,
+      "inconclusiveStreak": 0
+    }
+  },
+  "escalation": {
+    "level": 2,
+    "history": [
+      {
+        "at": 1788198811879,
+        "taskId": "T5",
+        "from": 1,
+        "to": 2,
+        "reason": "人工升级"
+      }
+    ]
+  },
+  "envFingerprint": "sha256:d74cabbb07a38208",
+  "pendingHandoff": null,
+  "sessionMap": {
+    "T1": "/root/.pi/agent/sessions/--root-projects-todo-list--/2026-08-31T17-00-42-415Z_01a058c4-1c2f-750f-8819-eee8a7abafde.jsonl",
+    "T2": "/root/.pi/agent/sessions/--root-projects-todo-list--/2026-08-31T17-36-45-268Z_01a058e5-1cd4-735e-9fc2-b05efb28121c.jsonl",
+    "T3": "/root/.pi/agent/sessions/--root-projects-todo-list--/2026-08-31T17-38-54-640Z_01a058e7-1630-7a09-b068-e21ad3a5c4a7.jsonl",
+    "T4": "/root/.pi/agent/sessions/--root-projects-todo-list--/2026-08-31T17-43-24-666Z_01a058eb-34fa-7381-be83-ffe852c7bae1.jsonl",
+    "T5": "/root/.pi/agent/sessions/--root-projects-todo-list--/2026-08-31T17-54-37-196Z_01a058f5-780c-7892-988e-40884ccb7d05.jsonl"
+  },
+  "cost": {
+    "planner": 0.0087926608,
+    "executor": 0.7533449536,
+    "verifier": 0.11532990639999999
+  },
+  "metrics": {
+    "touchedFiles": [
+      "/root/projects/todo-list/internal/tui/tui.go",
+      "/root/projects/todo-list/internal/tui/tui_test.go",
+      "/root/projects/todo-list/cmd/todo-list/main_test.go"
+    ],
+    "touchedPublicApi": false
+  },
+  "updatedAt": 1788198882780
+}

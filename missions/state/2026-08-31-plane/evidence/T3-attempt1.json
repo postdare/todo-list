@@ -1,0 +1,39 @@
+{
+  "taskId": "T3",
+  "attempt": 1,
+  "at": 1788196499385,
+  "evidences": [
+    {
+      "level": "hard",
+      "acId": "test-e2e",
+      "result": "pass",
+      "raw": "ok  \ttodo-list/cmd/todo-list\t2.534s\n\n",
+      "exitCode": 0,
+      "envFingerprint": "sha256:d74cabbb07a38208"
+    },
+    {
+      "level": "hard",
+      "acId": "build",
+      "result": "pass",
+      "raw": "\n",
+      "exitCode": 0,
+      "envFingerprint": "sha256:d74cabbb07a38208"
+    },
+    {
+      "level": "hard",
+      "acId": "fmt",
+      "result": "pass",
+      "raw": "\n",
+      "exitCode": 0,
+      "envFingerprint": "sha256:d74cabbb07a38208"
+    },
+    {
+      "level": "hard",
+      "acId": "contract",
+      "result": "pass",
+      "raw": "\n",
+      "exitCode": 0,
+      "envFingerprint": "sha256:d74cabbb07a38208"
+    }
+  ]
+}
