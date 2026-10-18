@@ -84,7 +84,7 @@
   .desc { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; word-break: break-word; }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .actions button { padding: 4px 10px; font-size: 12px; }
-  .shortcuts { margin: 0; padding: 0 24px 8px; font-size: 12px; color: var(--muted); }
+  .shortcuts { margin: 0; padding: 0 24px 8px; font-size: 12px; color: var(--muted); text-align: center; }
   .shortcuts kbd {
     display: inline-block; min-width: 18px; padding: 1px 5px; margin: 0 1px;
     border-radius: 2px; background: var(--neutral); color: var(--ink);
@@ -135,8 +135,8 @@
   <button type="button" class="primary" id="add-button">新增</button>
 </header>
 <main id="board"></main>
-<p class="shortcuts">快捷键：<kbd>c</kbd> 新建 · <kbd>e</kbd> 编辑选中 · <kbd>d</kbd> 删除选中</p>
 <div id="status" role="status"></div>
+<p class="shortcuts">快捷键：<kbd>c</kbd> 新建 · <kbd>e</kbd> 编辑选中 · <kbd>d</kbd> 删除选中</p>
 
 <div class="modal-backdrop" id="modal" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-heading" aria-describedby="modal-message">
