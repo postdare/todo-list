@@ -11,8 +11,12 @@
     --field: #e6e9ee;
     --ink: #15191f;
     --muted: #5b6472;
+    --line: #dfe3e8;
     --accent: #2563eb;
     --accent-hover: #1d4ed8;
+    --accent-ink: #ffffff;
+    --panel-accent: #0369a1;
+    --panel-soft: #e0f2fe;
     --danger: #d92626;
     --danger-hover: #b81d1d;
     --neutral: #dfe3e8;
@@ -38,6 +42,7 @@
     gap: 16px; padding: 24px 24px 0;
   }
   h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0; }
+  .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   button {
     font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 2px;
     border: 0; background: var(--neutral); color: var(--ink);
@@ -49,8 +54,8 @@
   button.danger { background: var(--danger); color: #fff; }
   button.danger:hover { background: var(--danger-hover); }
   #board {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px; padding: 16px 24px 32px; align-items: start;
+    display: flex; flex-wrap: wrap; gap: 16px;
+    padding: 16px 24px 32px; align-items: flex-start;
   }
   .column {
     --status: var(--todo);
@@ -59,11 +64,25 @@
   }
   .column:nth-child(2) { --status: var(--doing); background: var(--doing-bg); }
   .column:nth-child(3) { --status: var(--done); background: var(--done-bg); }
+  /* 自定义分区：沿用扁平样式，用另一组主色与状态列区分。 */
+  .column.custom { --status: var(--panel-accent); background: var(--panel-soft); }
   .column h2 {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
     margin: 0 0 12px; font-size: 14px; font-weight: 700; letter-spacing: .5px;
     padding: 8px 10px; border-radius: 2px;
     background: var(--status); color: #fff;
   }
+  .column h2 .name {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .col-actions { display: flex; gap: 4px; flex: none; }
+  .col-actions button {
+    padding: 2px 8px; font-size: 11px; font-weight: 700; border-radius: 2px;
+    background: rgba(255, 255, 255, .2); color: #fff;
+  }
+  .col-actions button:hover { background: rgba(255, 255, 255, .36); }
+  .col-actions button.danger { background: rgba(255, 255, 255, .2); color: #fff; }
+  .col-actions button.danger:hover { background: var(--danger-hover); }
   .empty { margin: 6px 4px; color: var(--muted); font-size: 13px; }
   .card {
     background: var(--panel); border-left: 3px solid var(--status);
@@ -81,9 +100,19 @@
   .column.drag-over .empty { color: var(--status); font-weight: 600; }
   .card h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; word-break: break-word; }
   .card .done { text-decoration: line-through; color: var(--muted); }
+  .badge {
+    display: inline-block; margin-bottom: 6px; padding: 1px 8px;
+    border-radius: 999px; background: #eef1f5; color: var(--muted);
+    font-size: 11px; letter-spacing: .3px;
+  }
   .desc { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; word-break: break-word; }
-  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
   .actions button { padding: 4px 10px; font-size: 12px; }
+  .actions select {
+    padding: 5px 8px; font: inherit; font-size: 12px; font-weight: 600;
+    border: 0; border-radius: 2px; background: var(--field); color: var(--ink);
+    cursor: pointer;
+  }
   .shortcuts { margin: 0; padding: 0 24px 8px; font-size: 12px; color: var(--muted); text-align: center; }
   .shortcuts kbd {
     display: inline-block; min-width: 18px; padding: 1px 5px; margin: 0 1px;
@@ -125,14 +154,18 @@
   button.danger.solid:hover { background: var(--danger-hover); }
   button:disabled { opacity: .55; cursor: default; }
   @media (max-width: 720px) {
-    #board { grid-template-columns: 1fr; }
+    .column { flex-basis: 100%; }
+    header { flex-wrap: wrap; }
   }
 </style>
 </head>
 <body>
 <header>
   <h1>待办清单 Todo List</h1>
-  <button type="button" class="primary" id="add-button">新增</button>
+  <div class="header-actions">
+    <button type="button" id="add-panel-button">新增分区</button>
+    <button type="button" class="primary" id="add-button">新增</button>
+  </div>
 </header>
 <main id="board"></main>
 <div id="status" role="status"></div>
@@ -144,7 +177,7 @@
     <p class="modal-message" id="modal-message" hidden></p>
     <form id="modal-form" novalidate>
       <div class="modal-fields" id="modal-fields">
-        <label class="modal-field" for="modal-title">标题
+        <label class="modal-field" for="modal-title"><span id="modal-title-label">标题</span>
           <input id="modal-title" maxlength="200" autocomplete="off">
         </label>
         <label class="modal-field" for="modal-description" id="modal-description-field">描述（可选）
@@ -170,7 +203,9 @@
   const board = document.getElementById('board');
   const statusLine = document.getElementById('status');
   const addButton = document.getElementById('add-button');
+  const addPanelButton = document.getElementById('add-panel-button');
   let todos = [];
+  let panels = [];
   let selectedId = null; // 当前选中的任务 id（供 e/d 快捷键使用）
   let draggingId = null; // 正在拖拽的任务 id
   let suppressClickUntil = 0; // 拖拽刚结束时吞掉误触发的点击
@@ -209,7 +244,12 @@
 
   async function load() {
     try {
-      todos = await api('/api/todos');
+      const [loadedTodos, loadedPanels] = await Promise.all([
+        api('/api/todos'),
+        api('/api/panels'),
+      ]);
+      todos = loadedTodos;
+      panels = loadedPanels;
       showError(null);
       render();
     } catch (err) {
@@ -235,16 +275,25 @@
     }
   }
 
-  function setStatus(todo, status) {
-    return mutate('/api/todos/' + encodeURIComponent(todo.id), {
-      method: 'PUT',
+  function jsonOptions(method, payload) {
+    return {
+      method: method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: status }),
-    });
+      body: JSON.stringify(payload),
+    };
+  }
+
+  function setStatus(todo, status) {
+    return mutate('/api/todos/' + encodeURIComponent(todo.id), jsonOptions('PUT', { status: status }));
+  }
+
+  function setPanel(todo, panelID) {
+    return mutate('/api/todos/' + encodeURIComponent(todo.id), jsonOptions('PUT', { panel_id: panelID }));
   }
 
   // ---- 拖拽改变状态 ---------------------------------------------------------
   // 卡片可拖动，整列是放置区；放在同一列不发请求。
+  // 自定义分区列没有 data-status，不能作为拖拽目标（分区归属用卡片上的下拉框）。
   function todoById(id) {
     return todos.find(todo => todo.id === id) || null;
   }
@@ -284,7 +333,7 @@
 
   board.addEventListener('dragover', event => {
     const column = event.target.closest('.column');
-    if (!column || !draggingId) return;
+    if (!column || !column.dataset.status || !draggingId) return;
     event.preventDefault(); // 允许放下
     event.dataTransfer.dropEffect = 'move';
     for (const item of board.querySelectorAll('.column')) {
@@ -303,13 +352,14 @@
   board.addEventListener('drop', event => {
     const column = event.target.closest('.column');
     if (!column) return;
+    const status = column.dataset.status;
+    if (!status) return; // 自定义分区列不接受拖拽改状态
     event.preventDefault();
     const id = draggingId || event.dataTransfer.getData('text/plain');
     const todo = todoById(id);
-    const status = column.dataset.status;
     clearDragOver();
     // 同列放下、或任务/列无效时不做任何事（不发请求）。
-    if (!todo || !status || todo.status === status) return;
+    if (!todo || todo.status === status) return;
     setStatus(todo, status);
   });
 
@@ -321,13 +371,14 @@
     }
   }, true);
 
-  // ---- 页面内模态框（新增 / 编辑 / 删除确认） -------------------------------
+  // ---- 页面内模态框（新增 / 编辑 / 删除；任务与分区共用） --------------------
   const modal = document.getElementById('modal');
   const modalDialog = modal.querySelector('.modal');
   const modalHeading = document.getElementById('modal-heading');
   const modalMessage = document.getElementById('modal-message');
   const modalForm = document.getElementById('modal-form');
   const modalFields = document.getElementById('modal-fields');
+  const modalTitleLabel = document.getElementById('modal-title-label');
   const modalTitle = document.getElementById('modal-title');
   const modalDescription = document.getElementById('modal-description');
   const modalDescriptionField = document.getElementById('modal-description-field');
@@ -335,7 +386,8 @@
   const modalCancel = document.getElementById('modal-cancel');
   const modalSubmit = document.getElementById('modal-submit');
 
-  let modalState = null;          // { mode: 'create' | 'edit' | 'delete', todo, saving }
+  // { kind: 'todo' | 'panel', mode: 'create' | 'edit' | 'delete', todo, panel, saving }
+  let modalState = null;
   let restoreFocusElement = null; // 打开弹窗时获得焦点的元素（通常是触发按钮）
   let restoreLocator = null;      // 列表刷新后用于找回对应的触发按钮
   let pressedOnBackdrop = false;
@@ -360,43 +412,56 @@
     }
   }
 
-  function openModal(mode, todo) {
+  function openModal(kind, mode, entity) {
+    const isPanel = kind === 'panel';
     // 通过快捷键（c）打开时焦点在 body 上，关闭后回到「新增」按钮。
     const active = document.activeElement;
     restoreFocusElement = active && active !== document.body
       ? active
-      : (mode === 'create' ? addButton : null);
-    restoreLocator = todo ? { id: todo.id, action: mode } : null;
-    modalState = { mode: mode, todo: todo || null, saving: false };
+      : (kind === 'todo' && mode === 'create' ? addButton : null);
+    restoreLocator = entity ? { kind: kind, id: entity.id, action: mode } : null;
+    modalState = {
+      kind: kind,
+      mode: mode,
+      todo: isPanel ? null : (entity || null),
+      panel: isPanel ? (entity || null) : null,
+      saving: false,
+    };
 
     setModalError('');
     modalFields.hidden = mode === 'delete';
-    modalDescriptionField.hidden = mode !== 'edit';
+    modalDescriptionField.hidden = isPanel || mode !== 'edit';
     modalMessage.hidden = mode !== 'delete';
     modalSubmit.classList.toggle('primary', mode !== 'delete');
     modalSubmit.classList.toggle('danger', mode === 'delete');
     modalSubmit.classList.toggle('solid', mode === 'delete');
+    modalTitle.maxLength = isPanel ? 60 : 200;
+    modalTitleLabel.textContent = isPanel ? '分区名称' : '标题';
 
     if (mode === 'create') {
-      modalHeading.textContent = '新增任务';
+      modalHeading.textContent = isPanel ? '新增分区' : '新增任务';
       modalDialog.removeAttribute('aria-describedby');
       modalSubmit.textContent = '创建';
       modalTitle.value = '';
       modalDescription.value = '';
     } else if (mode === 'edit') {
-      modalHeading.textContent = '编辑任务';
+      modalHeading.textContent = isPanel ? '重命名分区' : '编辑任务';
       modalDialog.removeAttribute('aria-describedby');
       modalSubmit.textContent = '保存';
-      modalTitle.value = todo.title;
-      modalDescription.value = todo.description || '';
+      modalTitle.value = isPanel ? entity.name : entity.title;
+      modalDescription.value = isPanel ? '' : (entity.description || '');
     } else {
-      modalHeading.textContent = '删除任务';
+      modalHeading.textContent = isPanel ? '删除分区' : '删除任务';
       modalDialog.setAttribute('aria-describedby', 'modal-message');
       modalSubmit.textContent = '删除';
-      modalMessage.textContent = '';
       const name = document.createElement('strong');
-      name.textContent = '「' + todo.title + '」';
-      modalMessage.append('确定删除 ', name, '？此操作不可恢复。');
+      name.textContent = '「' + (isPanel ? entity.name : entity.title) + '」';
+      modalMessage.textContent = '';
+      if (isPanel) {
+        modalMessage.append('删除分区 ', name, '？分区内的任务会回到状态列。');
+      } else {
+        modalMessage.append('确定删除 ', name, '？此操作不可恢复。');
+      }
     }
 
     modal.hidden = false;
@@ -412,7 +477,8 @@
 
   function focusAction(locator) {
     if (!locator) return;
-    const selector = 'button[data-todo-id="' + CSS.escape(locator.id) + '"]' +
+    const attr = locator.kind === 'panel' ? 'panel-id' : 'todo-id';
+    const selector = 'button[data-' + attr + '="' + CSS.escape(locator.id) + '"]' +
       '[data-action="' + locator.action + '"]';
     const target = board.querySelector(selector);
     if (target) target.focus();
@@ -441,30 +507,36 @@
 
   async function submitModal() {
     if (!modalState || modalState.saving) return;
-    const todo = modalState.todo;
-    const mode = modalState.mode;
+    const state = modalState;
+    const kind = state.kind;
+    const mode = state.mode;
     setModalError('');
     setModalBusy(true);
 
-    let path = '/api/todos' + (todo ? '/' + encodeURIComponent(todo.id) : '');
+    const value = modalTitle.value.trim();
+    if (mode !== 'delete' && !value) {
+      setModalError(kind === 'panel' ? '分区名称不能为空' : '标题不能为空');
+      setModalBusy(false);
+      modalTitle.focus();
+      return;
+    }
+
+    let path;
     let options;
-    if (mode === 'create' || mode === 'edit') {
-      const title = modalTitle.value.trim();
-      if (!title) {
-        setModalError('标题不能为空');
-        setModalBusy(false);
-        modalTitle.focus();
-        return;
-      }
-      const payload = { title: title };
-      if (mode === 'edit') payload.description = modalDescription.value.trim();
-      options = {
-        method: mode === 'create' ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      };
+    if (kind === 'panel') {
+      path = '/api/panels' + (state.panel ? '/' + encodeURIComponent(state.panel.id) : '');
+      options = mode === 'delete'
+        ? { method: 'DELETE' }
+        : jsonOptions(mode === 'create' ? 'POST' : 'PUT', { name: value });
     } else {
-      options = { method: 'DELETE' };
+      path = '/api/todos' + (state.todo ? '/' + encodeURIComponent(state.todo.id) : '');
+      if (mode === 'delete') {
+        options = { method: 'DELETE' };
+      } else {
+        const payload = { title: value };
+        if (mode === 'edit') payload.description = modalDescription.value.trim();
+        options = jsonOptions(mode === 'create' ? 'POST' : 'PUT', payload);
+      }
     }
 
     const locator = restoreLocator;
@@ -522,20 +594,45 @@
   });
 
   function createTodo() {
-    openModal('create', null);
+    openModal('todo', 'create', null);
   }
 
   function editTodo(todo) {
-    openModal('edit', todo);
+    openModal('todo', 'edit', todo);
   }
 
   function deleteTodo(todo) {
-    openModal('delete', todo);
+    openModal('todo', 'delete', todo);
+  }
+
+  function createPanel() {
+    openModal('panel', 'create', null);
+  }
+
+  function renamePanel(panel) {
+    openModal('panel', 'edit', panel);
+  }
+
+  function deletePanel(panel) {
+    openModal('panel', 'delete', panel);
   }
 
   addButton.addEventListener('click', createTodo);
+  addPanelButton.addEventListener('click', createPanel);
 
-  function renderCard(todo) {
+  function panelSelect(todo) {
+    if (panels.length === 0) return null;
+    const select = document.createElement('select');
+    select.title = '归入分区';
+    select.setAttribute('aria-label', '归入分区');
+    select.appendChild(new Option('未分组', ''));
+    for (const panel of panels) select.appendChild(new Option(panel.name, panel.id));
+    select.value = todo.panel_id || '';
+    select.addEventListener('change', () => setPanel(todo, select.value));
+    return select;
+  }
+
+  function renderCard(todo, showStatus) {
     const card = document.createElement('article');
     card.className = 'card';
     card.dataset.todoId = todo.id;
@@ -545,6 +642,13 @@
       if (Date.now() < suppressClickUntil) return;
       selectTodo(todo.id);
     });
+
+    if (showStatus) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = todo.status;
+      card.appendChild(badge);
+    }
 
     const title = document.createElement('h3');
     title.textContent = (todo.status === '已完成' ? '✓ ' : '') + todo.title;
@@ -567,6 +671,8 @@
       nextBtn.dataset.action = 'next';
       actions.appendChild(nextBtn);
     }
+    const select = panelSelect(todo);
+    if (select) actions.appendChild(select);
     const editBtn = makeButton('编辑', '', () => editTodo(todo));
     editBtn.dataset.todoId = todo.id;
     editBtn.dataset.action = 'edit';
@@ -579,29 +685,68 @@
     return card;
   }
 
+  function renderColumn(name, items, options) {
+    const opts = options || {};
+    const column = document.createElement('section');
+    column.className = 'column' + (opts.panel ? ' custom' : '');
+    if (opts.status) column.dataset.status = opts.status;
+
+    const heading = document.createElement('h2');
+    const nameEl = document.createElement('span');
+    nameEl.className = 'name';
+    nameEl.textContent = name;
+    heading.appendChild(nameEl);
+
+    if (opts.panel) {
+      const actions = document.createElement('span');
+      actions.className = 'col-actions';
+      const renameBtn = makeButton('重命名', '', () => renamePanel(opts.panel));
+      renameBtn.dataset.panelId = opts.panel.id;
+      renameBtn.dataset.action = 'edit';
+      actions.appendChild(renameBtn);
+      const deleteBtn = makeButton('删除', 'danger', () => deletePanel(opts.panel));
+      deleteBtn.dataset.panelId = opts.panel.id;
+      deleteBtn.dataset.action = 'delete';
+      actions.appendChild(deleteBtn);
+      heading.appendChild(actions);
+    }
+    column.appendChild(heading);
+
+    if (items.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = '暂无任务';
+      column.appendChild(empty);
+    } else {
+      for (const todo of items) column.appendChild(renderCard(todo, !!opts.panel));
+    }
+    return column;
+  }
+
   function render() {
     // 选中的任务可能已被删除，此时清除选中态。
     if (selectedId && !todos.some(todo => todo.id === selectedId)) selectedId = null;
     board.textContent = '';
-    for (const status of STATUSES) {
-      const column = document.createElement('section');
-      column.className = 'column' + (status === '进行中' ? ' active' : '');
-      column.dataset.status = status;
 
-      const heading = document.createElement('h2');
-      heading.textContent = status;
-      column.appendChild(heading);
-
-      const items = todos.filter(todo => todo.status === status);
-      if (items.length === 0) {
-        const empty = document.createElement('p');
-        empty.className = 'empty';
-        empty.textContent = '暂无任务';
-        column.appendChild(empty);
+    // Todos belonging to a custom panel move off the status columns; todos
+    // without a panel (or pointing at a deleted one) keep the original
+    // three-column behaviour.
+    const byPanel = new Map(panels.map(panel => [panel.id, []]));
+    const ungrouped = [];
+    for (const todo of todos) {
+      if (todo.panel_id && byPanel.has(todo.panel_id)) {
+        byPanel.get(todo.panel_id).push(todo);
       } else {
-        for (const todo of items) column.appendChild(renderCard(todo));
+        ungrouped.push(todo);
       }
-      board.appendChild(column);
+    }
+
+    for (const status of STATUSES) {
+      const items = ungrouped.filter(todo => todo.status === status);
+      board.appendChild(renderColumn(status, items, { status: status }));
+    }
+    for (const panel of panels) {
+      board.appendChild(renderColumn(panel.name, byPanel.get(panel.id), { panel: panel }));
     }
   }
 

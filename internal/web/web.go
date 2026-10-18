@@ -36,6 +36,10 @@ func NewServer(store storage.Storage) *Server {
 	s.mux.HandleFunc("POST /api/todos", s.handleCreate)
 	s.mux.HandleFunc("PUT /api/todos/{id}", s.handleUpdate)
 	s.mux.HandleFunc("DELETE /api/todos/{id}", s.handleDelete)
+	s.mux.HandleFunc("GET /api/panels", s.handleListPanels)
+	s.mux.HandleFunc("POST /api/panels", s.handleCreatePanel)
+	s.mux.HandleFunc("PUT /api/panels/{id}", s.handleUpdatePanel)
+	s.mux.HandleFunc("DELETE /api/panels/{id}", s.handleDeletePanel)
 	return s
 }
 
@@ -104,11 +108,13 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateRequest is the payload accepted by PUT /api/todos/{id}. Omitted
-// fields (nil pointers) are left unchanged.
+// fields (nil pointers) are left unchanged. An empty panel_id moves the todo
+// back to the ungrouped status columns.
 type updateRequest struct {
 	Title       *string `json:"title"`
 	Description *string `json:"description"`
 	Status      *string `json:"status"`
+	PanelID     *string `json:"panel_id"`
 }
 
 func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +164,28 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.Status != nil {
 		updated.Status = todo.Status(*req.Status)
 	}
+	if req.PanelID != nil {
+		panelID := strings.TrimSpace(*req.PanelID)
+		if panelID != "" {
+			panels, err := s.store.ListPanels()
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "读取失败："+err.Error())
+				return
+			}
+			found := false
+			for _, p := range panels {
+				if p.ID == panelID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				writeError(w, http.StatusBadRequest, "分区不存在："+panelID)
+				return
+			}
+		}
+		updated.PanelID = panelID
+	}
 
 	if err := s.store.Update(updated); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
@@ -177,6 +205,117 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.Delete(r.PathValue("id")); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "任务不存在")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "删除失败："+err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleListPanels(w http.ResponseWriter, r *http.Request) {
+	panels, err := s.store.ListPanels()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "读取失败："+err.Error())
+		return
+	}
+	if panels == nil {
+		panels = []todo.Panel{}
+	}
+	writeJSON(w, http.StatusOK, panels)
+}
+
+// panelRequest is the payload accepted by POST /api/panels and
+// PUT /api/panels/{id}.
+type panelRequest struct {
+	Name string `json:"name"`
+}
+
+func (s *Server) handleCreatePanel(w http.ResponseWriter, r *http.Request) {
+	var req panelRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "分区名称不能为空")
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.store.AddPanel(todo.Panel{Name: name}); err != nil {
+		writeError(w, http.StatusInternalServerError, "保存失败："+err.Error())
+		return
+	}
+
+	panels, err := s.store.ListPanels()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "读取失败："+err.Error())
+		return
+	}
+	if len(panels) == 0 {
+		writeError(w, http.StatusInternalServerError, "保存后未找到分区")
+		return
+	}
+	writeJSON(w, http.StatusCreated, panels[len(panels)-1])
+}
+
+func (s *Server) handleUpdatePanel(w http.ResponseWriter, r *http.Request) {
+	var req panelRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "分区名称不能为空")
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id := r.PathValue("id")
+	panels, err := s.store.ListPanels()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "读取失败："+err.Error())
+		return
+	}
+	found := false
+	var updated todo.Panel
+	for _, p := range panels {
+		if p.ID == id {
+			updated, found = p, true
+			break
+		}
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "分区不存在")
+		return
+	}
+
+	updated.Name = name
+	if err := s.store.UpdatePanel(updated); err != nil {
+		if errors.Is(err, storage.ErrPanelNotFound) {
+			writeError(w, http.StatusNotFound, "分区不存在")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "保存失败："+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) handleDeletePanel(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.store.DeletePanel(r.PathValue("id")); err != nil {
+		if errors.Is(err, storage.ErrPanelNotFound) {
+			writeError(w, http.StatusNotFound, "分区不存在")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "删除失败："+err.Error())
