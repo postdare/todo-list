@@ -76,12 +76,20 @@
   .card {
     background: var(--panel); border-left: 3px solid var(--status);
     border-radius: 2px; padding: 10px 12px; margin-bottom: 10px;
+    cursor: pointer;
   }
+  .card.selected { outline: 2px solid var(--accent); outline-offset: 0; }
   .card h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; word-break: break-word; }
   .card .done { text-decoration: line-through; color: var(--muted); }
   .desc { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; word-break: break-word; }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .actions button { padding: 4px 10px; font-size: 12px; }
+  .shortcuts { margin: 0; padding: 0 24px 8px; font-size: 12px; color: var(--muted); }
+  .shortcuts kbd {
+    display: inline-block; min-width: 18px; padding: 1px 5px; margin: 0 1px;
+    border-radius: 2px; background: var(--neutral); color: var(--ink);
+    font-family: inherit; font-size: 12px; font-weight: 700; text-align: center;
+  }
   #status { padding: 0 24px; min-height: 20px; font-size: 13px; font-weight: 600; color: var(--danger); }
   body.modal-open { overflow: hidden; }
   .modal-backdrop {
@@ -131,6 +139,7 @@
   </form>
 </header>
 <main id="board"></main>
+<p class="shortcuts">快捷键：<kbd>c</kbd> 新建 · <kbd>e</kbd> 编辑选中 · <kbd>d</kbd> 删除选中</p>
 <div id="status" role="status"></div>
 
 <div class="modal-backdrop" id="modal" hidden>
@@ -165,6 +174,7 @@
   const board = document.getElementById('board');
   const statusLine = document.getElementById('status');
   let todos = [];
+  let selectedId = null; // 当前选中的任务 id（供 e/d 快捷键使用）
 
   async function api(path, options) {
     const res = await fetch(path, options);
@@ -178,6 +188,24 @@
 
   function showError(err) {
     statusLine.textContent = err ? '⚠ ' + err.message : '';
+  }
+
+  // 点击卡片选中，为 e/d 快捷键提供目标。
+  function selectTodo(id) {
+    selectedId = id;
+    for (const card of board.querySelectorAll('.card')) {
+      card.classList.toggle('selected', card.dataset.todoId === id);
+    }
+  }
+
+  function selectedTodo() {
+    return todos.find(todo => todo.id === selectedId) || null;
+  }
+
+  function isEditableElement(el) {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
   }
 
   async function load() {
@@ -409,6 +437,9 @@
   function renderCard(todo) {
     const card = document.createElement('article');
     card.className = 'card';
+    card.dataset.todoId = todo.id;
+    card.classList.toggle('selected', todo.id === selectedId);
+    card.addEventListener('click', () => selectTodo(todo.id));
 
     const title = document.createElement('h3');
     title.textContent = (todo.status === '已完成' ? '✓ ' : '') + todo.title;
@@ -444,6 +475,8 @@
   }
 
   function render() {
+    // 选中的任务可能已被删除，此时清除选中态。
+    if (selectedId && !todos.some(todo => todo.id === selectedId)) selectedId = null;
     board.textContent = '';
     for (const status of STATUSES) {
       const column = document.createElement('section');
@@ -484,6 +517,38 @@
       await load();
     } catch (err) {
       showError(err);
+    }
+  });
+
+  // ---- 快捷键 ---------------------------------------------------------------
+  // 输入框内、或弹窗打开时（Esc 由弹窗自行处理）不响应快捷键。
+  document.addEventListener('keydown', event => {
+    if (event.defaultPrevented || event.isComposing) return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (modalState) return;
+
+    if (event.key === 'Escape') {
+      if (isEditableElement(document.activeElement)) document.activeElement.blur();
+      return;
+    }
+
+    if (isEditableElement(document.activeElement)) return;
+
+    if (event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      document.getElementById('new-title').focus();
+      return;
+    }
+
+    const todo = selectedTodo();
+    if (!todo) return;
+
+    if (event.key.toLowerCase() === 'e') {
+      event.preventDefault();
+      editTodo(todo);
+    } else if (event.key.toLowerCase() === 'd' || event.key === 'Delete') {
+      event.preventDefault();
+      deleteTodo(todo);
     }
   });
 
