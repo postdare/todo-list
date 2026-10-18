@@ -57,8 +57,11 @@
     display: flex; flex-wrap: wrap; gap: 16px;
     padding: 16px 24px 32px; align-items: flex-start;
   }
+  /* 列按容器可用宽度等分：放不下 240px 时自动换行，行内列等宽。 */
   .column {
     --status: var(--todo);
+    flex: 1 1 240px;
+    min-width: 240px;
     background: var(--todo-bg); border-radius: 4px;
     padding: 12px; min-height: 160px;
   }
@@ -154,7 +157,7 @@
   button.danger.solid:hover { background: var(--danger-hover); }
   button:disabled { opacity: .55; cursor: default; }
   @media (max-width: 720px) {
-    .column { flex-basis: 100%; }
+    .column { flex-basis: 100%; min-width: 0; }
     header { flex-wrap: wrap; }
   }
 </style>
