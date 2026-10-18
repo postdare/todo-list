@@ -33,19 +33,11 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
       "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   }
-  header { padding: 24px 24px 0; }
-  h1 { margin: 0 0 16px; font-size: 22px; font-weight: 800; letter-spacing: 0; }
-  .add-form {
-    display: flex; gap: 8px; flex-wrap: wrap;
-    padding: 12px; background: var(--panel); border-radius: 4px;
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 24px 24px 0;
   }
-  .add-form input {
-    flex: 1 1 200px; min-width: 0; padding: 10px 12px;
-    border: 0; border-radius: 2px;
-    font: inherit; background: var(--field); color: inherit;
-  }
-  .add-form input::placeholder { color: var(--muted); }
-  .add-form input:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+  h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0; }
   button {
     font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 2px;
     border: 0; background: var(--neutral); color: var(--ink);
@@ -97,7 +89,8 @@
     display: flex; align-items: center; justify-content: center;
     padding: 16px; background: #23272e;
   }
-  .modal-backdrop[hidden], .modal-fields[hidden], .modal-message[hidden] { display: none; }
+  .modal-backdrop[hidden], .modal-fields[hidden], .modal-message[hidden],
+  #modal-description-field[hidden] { display: none; }
   .modal {
     width: min(480px, 100%); max-height: calc(100vh - 32px);
     overflow: auto; background: var(--panel); color: var(--ink);
@@ -125,18 +118,13 @@
   button:disabled { opacity: .55; cursor: default; }
   @media (max-width: 720px) {
     #board { grid-template-columns: 1fr; }
-    .add-form input { flex-basis: 100%; }
   }
 </style>
 </head>
 <body>
 <header>
   <h1>待办清单 Todo List</h1>
-  <form class="add-form" id="add-form">
-    <input id="new-title" name="title" placeholder="任务标题" maxlength="200" autocomplete="off" required>
-    <input id="new-description" name="description" placeholder="描述（可选）" maxlength="500" autocomplete="off">
-    <button class="primary" type="submit">添加</button>
-  </form>
+  <button type="button" class="primary" id="add-button">新增</button>
 </header>
 <main id="board"></main>
 <p class="shortcuts">快捷键：<kbd>c</kbd> 新建 · <kbd>e</kbd> 编辑选中 · <kbd>d</kbd> 删除选中</p>
@@ -151,7 +139,7 @@
         <label class="modal-field" for="modal-title">标题
           <input id="modal-title" maxlength="200" autocomplete="off">
         </label>
-        <label class="modal-field" for="modal-description">描述（可选）
+        <label class="modal-field" for="modal-description" id="modal-description-field">描述（可选）
           <textarea id="modal-description" maxlength="500"></textarea>
         </label>
       </div>
@@ -173,6 +161,7 @@
   };
   const board = document.getElementById('board');
   const statusLine = document.getElementById('status');
+  const addButton = document.getElementById('add-button');
   let todos = [];
   let selectedId = null; // 当前选中的任务 id（供 e/d 快捷键使用）
 
@@ -244,7 +233,7 @@
     });
   }
 
-  // ---- 页面内模态框（编辑 / 删除确认） -------------------------------------
+  // ---- 页面内模态框（新增 / 编辑 / 删除确认） -------------------------------
   const modal = document.getElementById('modal');
   const modalDialog = modal.querySelector('.modal');
   const modalHeading = document.getElementById('modal-heading');
@@ -253,11 +242,12 @@
   const modalFields = document.getElementById('modal-fields');
   const modalTitle = document.getElementById('modal-title');
   const modalDescription = document.getElementById('modal-description');
+  const modalDescriptionField = document.getElementById('modal-description-field');
   const modalError = document.getElementById('modal-error');
   const modalCancel = document.getElementById('modal-cancel');
   const modalSubmit = document.getElementById('modal-submit');
 
-  let modalState = null;          // { mode: 'edit' | 'delete', todo, saving }
+  let modalState = null;          // { mode: 'create' | 'edit' | 'delete', todo, saving }
   let restoreFocusElement = null; // 打开弹窗时获得焦点的元素（通常是触发按钮）
   let restoreLocator = null;      // 列表刷新后用于找回对应的触发按钮
   let pressedOnBackdrop = false;
@@ -272,26 +262,40 @@
     modalCancel.disabled = busy;
     modalTitle.disabled = busy;
     modalDescription.disabled = busy;
-    if (modalState && modalState.mode === 'edit') {
+    if (!modalState) return;
+    if (modalState.mode === 'edit') {
       modalSubmit.textContent = busy ? '保存中…' : '保存';
-    } else if (modalState) {
+    } else if (modalState.mode === 'create') {
+      modalSubmit.textContent = busy ? '创建中…' : '创建';
+    } else {
       modalSubmit.textContent = busy ? '删除中…' : '删除';
     }
   }
 
   function openModal(mode, todo) {
-    restoreFocusElement = document.activeElement;
-    restoreLocator = { id: todo.id, action: mode };
-    modalState = { mode: mode, todo: todo, saving: false };
+    // 通过快捷键（c）打开时焦点在 body 上，关闭后回到「新增」按钮。
+    const active = document.activeElement;
+    restoreFocusElement = active && active !== document.body
+      ? active
+      : (mode === 'create' ? addButton : null);
+    restoreLocator = todo ? { id: todo.id, action: mode } : null;
+    modalState = { mode: mode, todo: todo || null, saving: false };
 
     setModalError('');
-    modalFields.hidden = mode !== 'edit';
+    modalFields.hidden = mode === 'delete';
+    modalDescriptionField.hidden = mode !== 'edit';
     modalMessage.hidden = mode !== 'delete';
-    modalSubmit.classList.toggle('primary', mode === 'edit');
+    modalSubmit.classList.toggle('primary', mode !== 'delete');
     modalSubmit.classList.toggle('danger', mode === 'delete');
     modalSubmit.classList.toggle('solid', mode === 'delete');
 
-    if (mode === 'edit') {
+    if (mode === 'create') {
+      modalHeading.textContent = '新增任务';
+      modalDialog.removeAttribute('aria-describedby');
+      modalSubmit.textContent = '创建';
+      modalTitle.value = '';
+      modalDescription.value = '';
+    } else if (mode === 'edit') {
       modalHeading.textContent = '编辑任务';
       modalDialog.removeAttribute('aria-describedby');
       modalSubmit.textContent = '保存';
@@ -310,7 +314,7 @@
     modal.hidden = false;
     document.body.classList.add('modal-open');
     setModalBusy(false);
-    if (mode === 'edit') {
+    if (mode !== 'delete') {
       modalTitle.focus();
       modalTitle.select();
     } else {
@@ -329,12 +333,12 @@
   function closeModal(refocus) {
     modal.hidden = true;
     document.body.classList.remove('modal-open');
+    setModalBusy(false);
     modalState = null;
     const previous = restoreFocusElement;
     const locator = restoreLocator;
     restoreFocusElement = null;
     restoreLocator = null;
-    setModalBusy(false);
     if (refocus === false) return;
     // 列表尚未刷新时触发按钮仍然存在；刷新后用 data 属性找回新生按钮。
     if (previous && previous.isConnected) previous.focus();
@@ -350,12 +354,13 @@
   async function submitModal() {
     if (!modalState || modalState.saving) return;
     const todo = modalState.todo;
+    const mode = modalState.mode;
     setModalError('');
     setModalBusy(true);
 
-    let path = '/api/todos/' + encodeURIComponent(todo.id);
+    let path = '/api/todos' + (todo ? '/' + encodeURIComponent(todo.id) : '');
     let options;
-    if (modalState.mode === 'edit') {
+    if (mode === 'create' || mode === 'edit') {
       const title = modalTitle.value.trim();
       if (!title) {
         setModalError('标题不能为空');
@@ -363,10 +368,12 @@
         modalTitle.focus();
         return;
       }
+      const payload = { title: title };
+      if (mode === 'edit') payload.description = modalDescription.value.trim();
       options = {
-        method: 'PUT',
+        method: mode === 'create' ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title, description: modalDescription.value.trim() }),
+        body: JSON.stringify(payload),
       };
     } else {
       options = { method: 'DELETE' };
@@ -381,8 +388,8 @@
     } catch (err) {
       setModalError(err.message);
       setModalBusy(false);
-      if (modalState && modalState.mode === 'edit') modalTitle.focus();
-      else modalSubmit.focus();
+      if (mode === 'delete') modalSubmit.focus();
+      else modalTitle.focus();
     }
   }
 
@@ -426,6 +433,10 @@
     if (shouldClose && modalState && !modalState.saving) closeModal();
   });
 
+  function createTodo() {
+    openModal('create', null);
+  }
+
   function editTodo(todo) {
     openModal('edit', todo);
   }
@@ -433,6 +444,8 @@
   function deleteTodo(todo) {
     openModal('delete', todo);
   }
+
+  addButton.addEventListener('click', createTodo);
 
   function renderCard(todo) {
     const card = document.createElement('article');
@@ -499,27 +512,6 @@
     }
   }
 
-  document.getElementById('add-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    const titleInput = document.getElementById('new-title');
-    const descInput = document.getElementById('new-description');
-    const title = titleInput.value.trim();
-    if (!title) return;
-    try {
-      await api('/api/todos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title, description: descInput.value.trim() }),
-      });
-      titleInput.value = '';
-      descInput.value = '';
-      titleInput.focus();
-      await load();
-    } catch (err) {
-      showError(err);
-    }
-  });
-
   // ---- 快捷键 ---------------------------------------------------------------
   // 输入框内、或弹窗打开时（Esc 由弹窗自行处理）不响应快捷键。
   document.addEventListener('keydown', event => {
@@ -536,7 +528,7 @@
 
     if (event.key.toLowerCase() === 'c') {
       event.preventDefault();
-      document.getElementById('new-title').focus();
+      createTodo();
       return;
     }
 
