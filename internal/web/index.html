@@ -71,6 +71,14 @@
     cursor: pointer;
   }
   .card.selected { outline: 2px solid var(--accent); outline-offset: 0; }
+  /* 拖拽：卡片半透明表示正在被拖动，目标列用虚线框高亮。 */
+  .card[draggable="true"] { cursor: grab; }
+  .card[draggable="true"]:active { cursor: grabbing; }
+  .card.dragging { opacity: .45; }
+  .column.drag-over {
+    outline: 3px dashed var(--status); outline-offset: -3px;
+  }
+  .column.drag-over .empty { color: var(--status); font-weight: 600; }
   .card h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; word-break: break-word; }
   .card .done { text-decoration: line-through; color: var(--muted); }
   .desc { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; word-break: break-word; }
@@ -164,6 +172,8 @@
   const addButton = document.getElementById('add-button');
   let todos = [];
   let selectedId = null; // 当前选中的任务 id（供 e/d 快捷键使用）
+  let draggingId = null; // 正在拖拽的任务 id
+  let suppressClickUntil = 0; // 拖拽刚结束时吞掉误触发的点击
 
   async function api(path, options) {
     const res = await fetch(path, options);
@@ -232,6 +242,84 @@
       body: JSON.stringify({ status: status }),
     });
   }
+
+  // ---- 拖拽改变状态 ---------------------------------------------------------
+  // 卡片可拖动，整列是放置区；放在同一列不发请求。
+  function todoById(id) {
+    return todos.find(todo => todo.id === id) || null;
+  }
+
+  function clearDragOver() {
+    for (const column of board.querySelectorAll('.column.drag-over')) {
+      column.classList.remove('drag-over');
+    }
+  }
+
+  board.addEventListener('dragstart', event => {
+    // 从「开始/编辑/删除」按钮上拖动时不要拖走整张卡片。
+    if (event.target.closest('button')) {
+      event.preventDefault();
+      return;
+    }
+    const card = event.target.closest('.card');
+    const todo = card ? todoById(card.dataset.todoId) : null;
+    if (!todo) {
+      event.preventDefault();
+      return;
+    }
+    draggingId = todo.id;
+    card.classList.add('dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', todo.id);
+  });
+
+  board.addEventListener('dragend', () => {
+    const card = board.querySelector('.card.dragging');
+    if (card) card.classList.remove('dragging');
+    draggingId = null;
+    clearDragOver();
+    // 部分浏览器在拖拽结束后还会补一个 click，避免误选中/误开弹窗。
+    suppressClickUntil = Date.now() + 250;
+  });
+
+  board.addEventListener('dragover', event => {
+    const column = event.target.closest('.column');
+    if (!column || !draggingId) return;
+    event.preventDefault(); // 允许放下
+    event.dataTransfer.dropEffect = 'move';
+    for (const item of board.querySelectorAll('.column')) {
+      item.classList.toggle('drag-over', item === column);
+    }
+  });
+
+  board.addEventListener('dragleave', event => {
+    const column = event.target.closest('.column');
+    if (!column) return;
+    // 在列内子元素之间移动也会触发 dragleave，真正离开该列才取消高亮。
+    if (event.relatedTarget && column.contains(event.relatedTarget)) return;
+    column.classList.remove('drag-over');
+  });
+
+  board.addEventListener('drop', event => {
+    const column = event.target.closest('.column');
+    if (!column) return;
+    event.preventDefault();
+    const id = draggingId || event.dataTransfer.getData('text/plain');
+    const todo = todoById(id);
+    const status = column.dataset.status;
+    clearDragOver();
+    // 同列放下、或任务/列无效时不做任何事（不发请求）。
+    if (!todo || !status || todo.status === status) return;
+    setStatus(todo, status);
+  });
+
+  // 拖拽后的补发 click 在捕获阶段统一拦截。
+  document.addEventListener('click', event => {
+    if (Date.now() < suppressClickUntil) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
 
   // ---- 页面内模态框（新增 / 编辑 / 删除确认） -------------------------------
   const modal = document.getElementById('modal');
@@ -451,8 +539,12 @@
     const card = document.createElement('article');
     card.className = 'card';
     card.dataset.todoId = todo.id;
+    card.draggable = true;
     card.classList.toggle('selected', todo.id === selectedId);
-    card.addEventListener('click', () => selectTodo(todo.id));
+    card.addEventListener('click', () => {
+      if (Date.now() < suppressClickUntil) return;
+      selectTodo(todo.id);
+    });
 
     const title = document.createElement('h3');
     title.textContent = (todo.status === '已完成' ? '✓ ' : '') + todo.title;
@@ -494,6 +586,7 @@
     for (const status of STATUSES) {
       const column = document.createElement('section');
       column.className = 'column' + (status === '进行中' ? ' active' : '');
+      column.dataset.status = status;
 
       const heading = document.createElement('h2');
       heading.textContent = status;
