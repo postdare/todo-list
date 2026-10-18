@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>待办清单 Todo List</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --ink: #1f2328;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #0ea5e9;
+    --accent-ink: #ffffff;
+    --danger: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  header { padding: 24px 24px 0; }
+  h1 { margin: 0 0 16px; font-size: 22px; letter-spacing: .5px; }
+  .add-form {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  .add-form input {
+    flex: 1 1 200px; min-width: 0; padding: 9px 12px;
+    border: 1px solid var(--line); border-radius: 8px;
+    font: inherit; background: #fff; color: inherit;
+  }
+  .add-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    font: inherit; padding: 8px 14px; border-radius: 8px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+    cursor: pointer; white-space: nowrap;
+  }
+  button:hover { border-color: #c9ced6; background: #fafbfc; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.primary:hover { filter: brightness(.95); }
+  button.danger { color: var(--danger); border-color: #f3c9c9; }
+  button.danger:hover { background: #fef2f2; }
+  #board {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px; padding: 16px 24px 32px; align-items: start;
+  }
+  .column {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px; min-height: 160px;
+  }
+  .column h2 {
+    margin: 0 0 10px; font-size: 14px; letter-spacing: .5px;
+    padding: 6px 10px; border-radius: 7px;
+    background: #eef1f5; color: var(--muted);
+  }
+  .column.active h2 { background: var(--accent); color: var(--accent-ink); }
+  .empty { margin: 6px 4px; color: #9aa1ab; font-style: italic; font-size: 13px; }
+  .card {
+    border: 1px solid var(--line); border-radius: 9px;
+    padding: 10px 12px; margin-bottom: 10px; background: #fff;
+  }
+  .card h3 { margin: 0; font-size: 15px; line-height: 1.4; word-break: break-word; }
+  .card .done { text-decoration: line-through; color: var(--muted); }
+  .desc { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; word-break: break-word; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .actions button { padding: 4px 10px; font-size: 12px; }
+  #status { padding: 0 24px; min-height: 20px; font-size: 13px; color: var(--danger); }
+  @media (max-width: 720px) {
+    #board { grid-template-columns: 1fr; }
+    .add-form input { flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>待办清单 Todo List</h1>
+  <form class="add-form" id="add-form">
+    <input id="new-title" name="title" placeholder="任务标题" maxlength="200" autocomplete="off" required>
+    <input id="new-description" name="description" placeholder="描述（可选）" maxlength="500" autocomplete="off">
+    <button class="primary" type="submit">添加</button>
+  </form>
+</header>
+<main id="board"></main>
+<div id="status" role="status"></div>
+
+<script>
+  const STATUSES = ['未开始', '进行中', '已完成'];
+  const NEXT = {
+    '未开始': { label: '开始', status: '进行中' },
+    '进行中': { label: '完成', status: '已完成' },
+    '已完成': { label: '重开', status: '未开始' },
+  };
+  const board = document.getElementById('board');
+  const statusLine = document.getElementById('status');
+  let todos = [];
+
+  async function api(path, options) {
+    const res = await fetch(path, options);
+    if (!res.ok) {
+      let message = res.statusText;
+      try { message = (await res.json()).error || message; } catch (e) {}
+      throw new Error(message);
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  function showError(err) {
+    statusLine.textContent = err ? '⚠ ' + err.message : '';
+  }
+
+  async function load() {
+    try {
+      todos = await api('/api/todos');
+      showError(null);
+      render();
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  function makeButton(label, className, onClick) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    if (className) btn.className = className;
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  async function mutate(path, options) {
+    try {
+      await api(path, options);
+      await load();
+    } catch (err) {
+      showError(err);
+    }
+  }
+
+  function setStatus(todo, status) {
+    return mutate('/api/todos/' + encodeURIComponent(todo.id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: status }),
+    });
+  }
+
+  function editTodo(todo) {
+    const title = prompt('标题', todo.title);
+    if (title === null) return;
+    const description = prompt('描述（可选）', todo.description || '');
+    if (description === null) return;
+    mutate('/api/todos/' + encodeURIComponent(todo.id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title, description: description }),
+    });
+  }
+
+  function deleteTodo(todo) {
+    if (!confirm('删除「' + todo.title + '」？')) return;
+    mutate('/api/todos/' + encodeURIComponent(todo.id), { method: 'DELETE' });
+  }
+
+  function renderCard(todo) {
+    const card = document.createElement('article');
+    card.className = 'card';
+
+    const title = document.createElement('h3');
+    title.textContent = (todo.status === '已完成' ? '✓ ' : '') + todo.title;
+    if (todo.status === '已完成') title.className = 'done';
+    card.appendChild(title);
+
+    if (todo.description) {
+      const desc = document.createElement('p');
+      desc.className = 'desc';
+      desc.textContent = todo.description;
+      card.appendChild(desc);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const next = NEXT[todo.status];
+    if (next) actions.appendChild(makeButton(next.label, '', () => setStatus(todo, next.status)));
+    actions.appendChild(makeButton('编辑', '', () => editTodo(todo)));
+    actions.appendChild(makeButton('删除', 'danger', () => deleteTodo(todo)));
+    card.appendChild(actions);
+    return card;
+  }
+
+  function render() {
+    board.textContent = '';
+    for (const status of STATUSES) {
+      const column = document.createElement('section');
+      column.className = 'column' + (status === '进行中' ? ' active' : '');
+
+      const heading = document.createElement('h2');
+      heading.textContent = status;
+      column.appendChild(heading);
+
+      const items = todos.filter(todo => todo.status === status);
+      if (items.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'empty';
+        empty.textContent = '暂无任务';
+        column.appendChild(empty);
+      } else {
+        for (const todo of items) column.appendChild(renderCard(todo));
+      }
+      board.appendChild(column);
+    }
+  }
+
+  document.getElementById('add-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const titleInput = document.getElementById('new-title');
+    const descInput = document.getElementById('new-description');
+    const title = titleInput.value.trim();
+    if (!title) return;
+    try {
+      await api('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, description: descInput.value.trim() }),
+      });
+      titleInput.value = '';
+      descInput.value = '';
+      titleInput.focus();
+      await load();
+    } catch (err) {
+      showError(err);
+    }
+  });
+
+  load();
+</script>
+</body>
+</html>

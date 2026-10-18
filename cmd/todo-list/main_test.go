@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -673,5 +676,139 @@ func TestLongTitleFullyShownE2E(t *testing.T) {
 	}
 	if items[0]["title"] != title {
 		t.Errorf("persisted title = %v, want full 14-char title", items[0]["title"])
+	}
+}
+
+// webRequest performs an HTTP request against the web-mode binary and drains
+// the response body so the connection can be reused.
+func webRequest(t *testing.T, client *http.Client, method, url, body string) (*http.Response, []byte) {
+	t.Helper()
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, url, reader)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return resp, data
+}
+
+// TestWebModeE2E starts the real binary with -web against an isolated config
+// home and drives the same HTTP API the browser UI uses: the page is served,
+// a todo created through the API is persisted to todos.json, its status can
+// be updated, and deleting it empties the store.
+func TestWebModeE2E(t *testing.T) {
+	// Pick a free port, then hand it to the binary.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	configHome := t.TempDir()
+	cmd := exec.Command(testBin, "-web", "-addr", addr)
+	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+configHome)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start web mode: %v", err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	})
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	base := "http://" + addr
+
+	// Wait for the server to accept connections.
+	deadline := time.Now().Add(10 * time.Second)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(base + "/api/todos")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				lastErr = nil
+				break
+			}
+			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+		} else {
+			lastErr = err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if lastErr != nil {
+		t.Fatalf("web server not ready: %v", lastErr)
+	}
+
+	// The browser page is served at /.
+	resp, page := webRequest(t, client, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(page), "待办清单") {
+		t.Errorf("GET / body does not contain the page title")
+	}
+
+	// Create a todo through the API.
+	resp, body := webRequest(t, client, http.MethodPost, base+"/api/todos",
+		`{"title":"网页任务","description":"来自浏览器"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST status = %d, want 201\n%s", resp.StatusCode, body)
+	}
+	var created map[string]any
+	if err := json.Unmarshal(body, &created); err != nil {
+		t.Fatalf("decode created todo: %v", err)
+	}
+	id, _ := created["id"].(string)
+	if id == "" {
+		t.Fatalf("created todo has no id: %v", created)
+	}
+
+	items, _ := readTodos(t, configHome)
+	if len(items) != 1 {
+		t.Fatalf("len(todos) = %d, want 1", len(items))
+	}
+	if items[0]["title"] != "网页任务" {
+		t.Errorf("title = %v, want 网页任务", items[0]["title"])
+	}
+	if items[0]["description"] != "来自浏览器" {
+		t.Errorf("description = %v, want 来自浏览器", items[0]["description"])
+	}
+	if items[0]["status"] != "未开始" {
+		t.Errorf("status = %v, want 未开始", items[0]["status"])
+	}
+
+	// Update the status through the API.
+	resp, body = webRequest(t, client, http.MethodPut, base+"/api/todos/"+id, `{"status":"已完成"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT status = %d, want 200\n%s", resp.StatusCode, body)
+	}
+	items, _ = readTodos(t, configHome)
+	if items[0]["status"] != "已完成" {
+		t.Errorf("status after update = %v, want 已完成", items[0]["status"])
+	}
+
+	// Delete it through the API.
+	resp, body = webRequest(t, client, http.MethodDelete, base+"/api/todos/"+id, "")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE status = %d, want 204\n%s", resp.StatusCode, body)
+	}
+	items, _ = readTodos(t, configHome)
+	if len(items) != 0 {
+		t.Errorf("len(todos) after delete = %d, want 0", len(items))
 	}
 }
